@@ -1,17 +1,44 @@
-// import * as cdk from 'aws-cdk-lib';
-// import { Template } from 'aws-cdk-lib/assertions';
-// import * as CdkAspectDemo from '../lib/cdk-aspect-demo-stack';
+import { BucketVersioningChecker } from '../lib/bucket-versioning-checker';
+import { Template } from 'aws-cdk-lib/assertions';
+import { Bucket } from 'aws-cdk-lib/aws-s3';
+import { Aspects, App, Stack } from 'aws-cdk-lib';
 
-// example test. To run these tests, uncomment this file along with the
-// example resource in lib/cdk-aspect-demo-stack.ts
-test('SQS Queue Created', () => {
-//   const app = new cdk.App();
-//     // WHEN
-//   const stack = new CdkAspectDemo.CdkAspectDemoStack(app, 'MyTestStack');
-//     // THEN
-//   const template = Template.fromStack(stack);
+describe('bucket versioning', () => {
+  test('バージョニングが有効になっている', () => {
+    const app = new App();
+    const stack = new Stack(app, 'test-stack');
+    new Bucket(stack, 'bucket', { versioned: true });
 
-//   template.hasResourceProperties('AWS::SQS::Queue', {
-//     VisibilityTimeout: 300
-//   });
+    Aspects.of(stack).add(new BucketVersioningChecker());
+
+    const assembly = app.synth();
+    const { messages } = assembly.getStackArtifact(stack.artifactId);
+
+    expect(messages).toHaveLength(0);
+  });
+
+  test('バージョニングを有効にする', () => {
+    const app = new App();
+    const stack = new Stack(app, 'test-stack');
+    new Bucket(stack, 'bucket', { versioned: false });
+
+    Aspects.of(stack).add(new BucketVersioningChecker({ fix: true }));
+
+    const assembly = app.synth();
+    const { messages } = assembly.getStackArtifact(stack.artifactId);
+
+    expect(messages).toHaveLength(0);
+
+    const template = Template.fromStack(stack);
+    template.hasResource('AWS::S3::Bucket', {
+      Type: 'AWS::S3::Bucket',
+      UpdateReplacePolicy: 'Retain',
+      DeletionPolicy: 'Retain',
+      Properties: {
+        VersioningConfiguration: {
+          Status: 'Enabled',
+        },
+      },
+    });
+  });
 });
